@@ -1,0 +1,356 @@
+---
+title: "Cleaning and Exploratory data analysis of Text Corpora"
+author: "Gaurav"
+date: "28 November 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#1. Summary
+The project analyses text corpus called HC Corpora. The Data is available in English, German, Finnish and Russian language. The Project analyses English language corpora only. The corpora are collected from publicly available sources by a web crawler like news, blogs and twitter. Reproducible scripts is written to sample the data and then clean it. Removing numbers, punctuation, extra white spaces, profanity filtering id done and this data is saved. Finally exploratory data analysis is performed. *We find highest **317** frequent words cover 50% of all word instances in the language.*
+
+Scripts is reproducible
+
+#2. Getting the Data
+The Dataset is downloaded from coursera and extracted.
+
+```{r,  cache=TRUE}
+if(!file.exists("./dataset")){
+    dir.create("./dataset");
+    dir.create("./dataset/raw");
+    fileUrl <- "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip";
+    download.file(fileUrl,destfile="./dataset/raw/Dataset.zip");
+    # Unzip dataSet to /dataset/raw directory
+    unzip(zipfile="./dataset/raw/Dataset.zip",exdir="./dataset/raw");
+}
+```
+
+### Analysing Raw Data
+The Downloaded Data contains directories for languages - English, Russian, Finnish and German. In each directory there are 3 files. This data is crawled from news, blogs and twitter. The project analyses data in English language only. 
+
+```{r, cache=TRUE , warning=FALSE}
+files <- list.files("./dataset/raw/final/en_US");
+sizeMb <- file.info(list.files("./dataset/raw/final/en_US", full.names = T))[,1]/(2^20);
+lines <- c(length(readLines("./dataset/raw/final/en_US/en_US.blogs.txt")),length(readLines("./dataset/raw/final/en_US/en_US.news.txt")),length(readLines("./dataset/raw/final/en_US/en_US.twitter.txt")));
+dfRaw <- data.frame(files, sizeMb, lines);
+dfRaw
+```
+
+Twitter data size is small but it contains highest number of lines. Contents of twitter file.
+
+```{r, cache=TRUE, warning=FALSE}
+readLines("./dataset/raw/final/en_US/en_US.twitter.txt")[1:5]
+```
+
+We can see the data is not in desired form. Data contains numbers, punctuation, extra white spaces, words of offensive and profane meaning. We need to do necessary cleaning on data.
+
+#3. Sampling
+Before cleaning we need to do sampling as the data is huge. Often relatively few randomly selected rows or chunks need to be included to get an accurate *approximation* to results that would be obtained using all the data. We created a separate sub-sample dataset in "sampled" directory by reading in a random subset of the original data and writing it out to a separate file.
+
+We sampled **1%** of raw data and saved it "sampled" directory
+
+```{r, cache=TRUE, warning=FALSE}
+## Sampling Dataset
+if(!file.exists("./dataset/sampled")){
+    sourceDir <- "./dataset/raw/final";
+    destDir <- "./dataset/sampled"
+    dir.create(destDir);
+    newdirectories <- list.files(sourceDir);
+    for (dir in newdirectories){
+        newDir <- paste(destDir, dir, sep = "/");
+        dir.create(newDir);
+        files <- list.files(paste(sourceDir, dir, sep = "/"));
+        for(file in files){
+            sourceFile <- paste(sourceDir, dir, file, sep = "/");
+            destFile <- paste(destDir, dir, file, sep = "/");
+            
+            fl <- readLines(sourceFile);
+            sampleVector <- rbinom(length(fl), 1, 0.01);
+            sampleFl <- fl[sampleVector == 1];
+            fileConn<-file(destFile);
+            writeLines(sampleFl, fileConn);
+            close(fileConn);
+            rm(fl,sampleFl)
+            gc();
+        }
+    }
+    ## removing all the variables  to free up memory
+    rm(list = ls())
+    ## forcefully calling garbage collector
+    gc();
+}
+```
+
+### Analysing Sampled Data
+After sampling we see the file sizes and number of lines of sampled data.
+
+```{r}
+files <- list.files("./dataset/sampled/en_US/");
+sizeMb <- file.info(list.files("./dataset/sampled/en_US/", full.names = T))[,1]/(2^20);
+lines <- c(length(readLines("./dataset/sampled/en_US/en_US.blogs.txt")),length(readLines("./dataset/sampled/en_US/en_US.news.txt")),length(readLines("./dataset/sampled/en_US/en_US.twitter.txt")));
+dfSampled <- data.frame(files, sizeMb, lines);
+dfSampled
+```
+
+We can see size of files and line counts are almost 1% of the raw data. This representative sample can be used to infer facts about raw data. **We will be performing cleaning on this sampled data.**
+
+#4. Cleaning
+Next step is to clean sampled data. We store it in "clean" directory.
+Cleaning procedure is as follows.
+
+###1. Lowring the words  
+
+This is required because words like "this" and "This" should be considered same.  
+
+###2. Replace puctuations like - and : with space
+
+There are many phrases in corpora like "24-years-old". If we remove "-" directly, "24yearsold" wouldn't make any sense. So here we are replacing "-" with space so phase would become "24 years old"
+
+###3. Removing numbers with apostrophe S ('s)
+
+Phrases like 90's, 80's, if we remove numbers and punctuation we will be left with single character s, which is not desirable, So in this step we remove all these types of terms.
+
+###4. Removing numbers
+
+In this step we remove all occurrences of numbers in dataset
+
+###5. Profanity Filtering
+
+The project filters the obscene words using [obscene word list by LDNOOBW on github.](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words)
+
+###6. Profanity Filtering Continued
+
+There are still obscene words which are masked and not identified by above step.
+eg. words like "sh*t"
+
+###7. Removing Punctuations except ' apostrophe
+
+This step will remove all punctuation **except ' apostrophe**. Because this is frequently used in writing like "that's", "it's", "here's". Removing it might not be a good idea. 
+
+
+###8. Removing Non-english words
+
+This step will remove words which are non-English. i.e. which are foreign language words.
+
+###9. Removing Extra whitespaces
+
+This step will remove extra white spaces.
+
+Reproducible script is written which performs all this steps on sampled data and stores it in "clean" directory.
+
+**We will be performing further analysis on this cleaned data.**
+
+```{r}
+if(!file.exists("./dataset/clean/")){
+    dir.create("./dataset/clean/en_US", recursive = T)
+    library(tm);
+    sourceDir <- "./dataset/sampled/en_US"
+    sourceFile <- "./dataset/sampled/en_US/en_US.blogs.txt"
+    
+    ## reading the sampled corpus
+    docs <- Corpus(DirSource(sourceDir));
+    
+    ## lowering the alphabets 
+    docs <- tm_map(docs , content_transformer(tolower));
+    
+    ## remove puctuations like - and : with space
+    ## eg. for 24-year-old like phrases 
+    toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
+    docs <- tm_map(docs, toSpace, "-")
+    docs <- tm_map(docs, toSpace, ":")
+    
+    ## removing numbers with apostrophe s 
+    ## eg. 20's 90's like tokens
+    docs <- tm_map(docs, toSpace, "[0-9]+'s")
+    
+    ## remove numbers
+    docs <- tm_map(docs , removeNumbers)
+    
+    ## profanity filtering
+    badwords <- readLines("profanity filtering.txt")
+    badwords <- paste(badwords,collapse ="|")
+    removeBadWords <- content_transformer(function(x, pattern) {return (gsub(pattern, "*", x))})
+    docs <- tm_map(docs, removeBadWords, badwords);
+    
+    ## remove words like sh*t
+    removeStaredBadWords <- content_transformer(function(x, pattern) {return (gsub(pattern, "", x))})
+    docs <- tm_map(docs, removeStaredBadWords, "[a-z]+\\*+[a-z]+");
+    
+    ## remove punctuations without apostrophe 
+    removePunctWithoutApostrophe <- content_transformer(function(x, pattern) {return (gsub(pattern, "", x))})
+    docs <- tm_map(docs, removePunctWithoutApostrophe, "[^[:alnum:][:space:]']");
+    
+    ## remove non-english words
+    removeNonEnglishWords <- content_transformer(function(x, pattern) {return (gsub(pattern, "", x))})
+    docs <- tm_map(docs, removeNonEnglishWords, "[^0-9A-Za-z///' ]");
+    
+    ## remove extra white spaces
+    docs <- tm_map(docs , stripWhitespace)
+    
+    writeCorpus(x = docs,path = "dataset/clean/en_US/",filenames = paste(names(docs), sep = ""))
+    rm(list = ls())
+    gc();
+}
+```
+
+Contents of twitter file.
+
+```{r, cache=TRUE, warning=FALSE}
+readLines("./dataset/clean/en_US/en_US.twitter.txt")[1:5]
+```
+
+We can see the data is in desired form. ' is frequently used in writing like "that's", "it's", "here's". Removing it might not be a good idea.
+
+#5. Exploratory Data Analysis
+Finally we are performing exploratory data analysis on clean data. Lets have a look at file sizes and line counts
+
+```{r, cache=TRUE, warning=FALSE}
+files <- list.files("./dataset/clean/en_US/");
+sizeMb <- file.info(list.files("./dataset/clean/en_US/", full.names = T))[,1]/(2^20);
+lines <- c(length(readLines("./dataset/clean/en_US/en_US.blogs.txt")),length(readLines("./dataset/clean/en_US/en_US.news.txt")),length(readLines("./dataset/clean/en_US/en_US.twitter.txt")));
+dfCleaned <- data.frame(files, sizeMb, lines);
+dfCleaned
+```
+
+Loading tm library and relevant libraries. Creating Corpus and DocumentTermMatrix
+```{r, cache=TRUE, warning=FALSE,message=FALSE}
+library(tm)
+library(ggplot2)
+library(dplyr)
+library(wordcloud)
+sourceDir <- "./dataset/clean/en_US/"
+
+corp <- Corpus(DirSource(sourceDir))
+dtm <- DocumentTermMatrix(corp)
+```
+
+## Document Term Matrix Analysis
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+library(tm)
+library(ggplot2)
+library(dplyr)
+library(wordcloud)
+```
+
+```{r, cache=TRUE, warning=FALSE, message=FALSE}
+dtm
+```
+In Document Term Matrix we have documents along the rows and terms along the columns. We see there are 3 documents and **53865** unique terms in data. Sparsity is **49%** which is quite high. In Document Term Matrix we have around 79071 entries zero. Which signifies there are many terms which occurs very few times (1 or 2 times) in corpora. Maximal term length is 98. We can remove the sparsity.
+
+```{r, cache=TRUE, warning=FALSE, message=FALSE}
+removeSparseTerms(x = dtm, sparse = .6)
+```
+Here We are removing terms which occurs only in 1 document. You can see the result. Unique terms dropped to **18972** and sparsity dropped to **16%**. These are the terms which occur frequently in the data. This is just for demonstration purpose.
+
+## Word counts by document
+
+```{r, cache=TRUE, warning=FALSE,message=FALSE}
+mat <- as.matrix(dtm)
+wordCount <- rowSums(mat)
+wordCount
+```
+
+## Word Frequency Analysis
+Now we are forming dataframe from DocumentTermMatrix on which it is easy to do transformations.
+Printing top 10 highest frequent words in dataset
+```{r, cache=TRUE, warning=FALSE,message=FALSE}
+mat <- as.matrix(dtm)
+freq <- colSums(mat)
+df <- data.frame(word <- names(freq), freq <- freq)
+colnames(df) <- c("word", "freq")
+rownames(df)<- NULL
+df <- arrange(df, desc(freq))
+head(df, 10)
+tail(df,10)
+```
+Shows high frequent and low frequent words in datasets.
+
+Now we see frequency wise sorted words which covers percentage wise instances of all word instances in the language, Cumulative percentages are also showed
+```{r, cache=TRUE, warning=FALSE,message=FALSE}
+## indexing by frequency
+df <- mutate(df, index = 1:length(word))
+## frequency percent
+df <- mutate(df, percent = (freq/(sum(freq)))*100)
+## frequency percent cumulative
+df <- mutate(df, cumPercent = ave(percent, FUN = cumsum))
+head(df, 10)
+```
+
+We see that top **10 words covers almost 16% of all instances** of text data. **Which is quite amazing.**
+
+Number Of words that covers 50% of instances
+```{r, cache=TRUE}
+filter(df,cumPercent>50)[1,]
+```
+We see that top **317** high frequent words covers **50%** of all instances in data out of all **53865** unique words
+
+Number of words that covers 90% of instances
+```{r, cache=TRUE}
+filter(df,cumPercent>90)[1,]
+```
+We see that top **9338** high frequent words covers **90%** of all instances in data out of all **53865** unique words. Which is amazing.
+
+## WordCloud
+Wordcloud of **top 150 words** after removing top 5 high frequent words, **"the, and, for, that, you"**, as they causes skewness in plot.
+```{r}
+## wordcloud
+wordcloud(words = df$word[-(1:5)], freq = df$freq[-(1:5)], min.freq = 10,
+          max.words=150, random.order=FALSE, scale = c(4,0.7), rot.per = 0.20, 
+          colors=brewer.pal(8, "Dark2"))
+```
+
+## Plot
+Barplot of top 20 highest frequent words
+```{r}
+p <- ggplot(df[1:20,], aes(word, freq))
+p <- p + geom_bar(stat="identity")
+p <- p + theme(axis.text.x=element_text(angle=45, hjust=1))
+p
+```
+
+#6. Tokenization
+We will create tokens of 2 words 2-gram, tokens of 3 words 3-grams, and find the frequencies of them. Word pairs are sorted in descending order of Frequencies. 
+
+##1. Frequencies of 2-grams
+```{r, cache=TRUE, warning=FALSE, message=FALSE}
+BigramTokenizer <- function(x){
+    unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
+}
+
+dtmBi <- DocumentTermMatrix(corp, control = list(tokenize = BigramTokenizer))
+matBi <- as.matrix(dtmBi)
+freqBi <- colSums(matBi)
+dfBi <- data.frame(word <- names(freqBi), freq <- freqBi)
+colnames(dfBi) <- c("word pairs", "freq")
+rownames(dfBi)<- NULL
+dfBi <- arrange(dfBi, desc(freq))
+head(dfBi, 10)
+```
+
+##2. Frequencies of 3-grams
+```{r, cache=TRUE, warning=FALSE, message=FALSE}
+TrigramTokenizer <-function(x){
+    unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE)
+}
+
+dtmTri <- DocumentTermMatrix(corp, control = list(tokenize = TrigramTokenizer))
+matTri <- as.matrix(dtmTri)
+freqTri <- colSums(matTri)
+dfTri <- data.frame(word <- names(freqTri), freq <- freqTri)
+colnames(dfTri) <- c("word pairs", "freq")
+rownames(dfTri)<- NULL
+dfTri <- arrange(dfTri, desc(freq))
+head(dfTri, 10)
+```
+As we move from 2-gram to 3-gram, 3-gram to 4-gram, accuracy increases but at the cost of speed and performance. We Have to find perfect balance between accuray ~ speed in n-gram model. Which we will be doing in upcoming sessions.
+
+#7. Prediction Algorithm
+Prediction algorithm will be n-gram. We will find the occurrences of words paired in 2 groups, 3 groups, 4 groups in the corpora. Then find the frequencies of these groups, through which we will get the probability of next word.
+
+We will analyse the accuracy and speed of 2-gram, 3gram, 4-gram. Then we will choose algorithm which gives good speed with good accuracy.
+
+#8. Shiny App
+App will consists of a text area, below text area there will be 3 suggested word predictions. As soon as couple of words are typed in text area, 3 suggestions will show up. Middle one will be top suggestion. There will be buttons above these suggestions, when clicked content will be entered in text area. Shortcut keys will be assigned to these buttons to speed up typing. Lets see if we can enter on commercial level with this app..!!
