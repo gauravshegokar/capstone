@@ -4,6 +4,8 @@ library(tau)
 library(dplyr)
 library(tm)
 
+
+
 sourceDir <- "./dataset/clean/en_US/";
 files <- list.files(sourceDir);
 combinedData <- vector(mode = "character")
